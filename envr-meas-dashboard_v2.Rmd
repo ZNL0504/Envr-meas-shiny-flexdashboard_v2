@@ -1,0 +1,1554 @@
+---
+title: "Environmental Measures Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    logo: cleanair.png
+    vertical_layout: fill
+    orientation: rows
+    theme: cerulean
+runtime: shiny
+---
+
+``` {js js code with theme cerulean}
+// Inverse the color of navigation bar.
+$('.navbar-inverse').removeClass('navbar-inverse').addClass('navbar-default');
+```
+
+```{css css code set valuebox height value and caption fontsize color}
+
+.navbar-logo img{
+   max-width: 46px;
+   max-height: 46px;
+}
+
+.value-box {
+  height: 90px;
+}
+
+.value-box .value {
+    font-size: 30px;
+    color: white;
+}
+
+.caption {
+  color: white;
+}
+
+<!-- .fa { -->
+<!--      font-size: 12px; -->
+<!--  } -->
+
+```
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(tidyverse) # data wrangling
+library(scales)
+library(lubridate) # datetime data wrangling
+library(plotly) # interactive data visualization
+library(ggrepel)
+library(ggalluvial)
+library(ggthemes)
+library(highcharter) # interactive data visualization
+
+# for font family
+library(extrafont)
+loadfonts(device = "win")
+
+# packages for sf map plotting
+library(sf) # simple features
+library(albersusa) # includes sf data for map plotting
+
+# packages for color palettes
+library(viridis)
+library(RColorBrewer)
+library(Polychrome)
+library(rcartocolor)
+library(unikn)
+
+```
+
+```{r read data and note about emoji, include=FALSE}
+
+### read in data
+
+## page 1: GHG overall picture
+# data for choropleths map
+GHG_all_states_11_20 <- read_csv("data/GHG_all_states_11_20.csv")
+GHG_range <-  # for plot limit setting 
+  c(min(GHG_all_states_11_20$total), max(GHG_all_states_11_20$total))
+
+## page 2: 10-year Trend
+# data for stacked line charts (also for bar charts on page 3):
+GHG_combined_11_20 <- read_csv("data/GHG_combined_11_20.csv")
+# GHG_combined_11_20 is the combination of 4 .csv files:
+# GHG_MA_11_20, GHG_NH_11_20, GHG_NY_11_20, GHG_VT_11_20
+
+# for plot limit setting
+GHG_max_gastype <- max(rowSums(GHG_combined_11_20[, 1:10]))
+GHG_max_industry <- max(rowSums(GHG_combined_11_20[, 11:19]))
+
+## page 3: for a year
+# data for alluvial diagrams
+GHG_MA_allu_11_20 <- read_csv("data/GHG_MA_alluvial_11_20.csv")
+GHG_NH_allu_11_20 <- read_csv("data/GHG_NH_alluvial_11_20.csv")
+GHG_NY_allu_11_20 <- read_csv("data/GHG_NY_alluvial_11_20.csv")
+GHG_VT_allu_11_20 <- read_csv("data/GHG_VT_alluvial_11_20.csv")
+
+## page 4: AQI 11-year Trend
+# data for AQI monthly trend
+AQI_Chau_11_21_monthly <- read_csv("data/AQI_Chau_11_21_monthly.csv")
+AQI_Coos_11_21_monthly <- read_csv("data/AQI_Coos_11_21_monthly.csv")
+AQI_Hami_11_21_monthly <- read_csv("data/AQI_Hami_11_21_monthly.csv")
+AQI_NYC_11_21_monthly <- read_csv("data/AQI_NYC_11_21_monthly.csv")
+AQI_Rutl_11_21_monthly <- read_csv("data/AQI_Rutl_11_21_monthly.csv")
+AQI_Worc_11_21_monthly <- read_csv("data/AQI_Worc_11_21_monthly.csv")
+
+# data for heatmpas and boxplots (scatter plots):
+# also for line chart and heatmap on page 5
+AQI_Chau_11_21 <- read_csv("data/AQI_Chau_11_21.csv")
+AQI_Coos_11_21 <- read_csv("data/AQI_Coos_11_21.csv")
+AQI_Hami_11_21 <- read_csv("data/AQI_Hami_11_21.csv")
+AQI_NYC_11_21 <- read_csv("data/AQI_NYC_11_21.csv")
+AQI_Rutl_11_21 <- read_csv("data/AQI_Rutl_11_21.csv")
+AQI_Worc_11_21 <- read_csv("data/AQI_Worc_11_21.csv")
+
+```
+
+
+<span style="color:#FFFF99FF"><font size="4">**GHG** </font></span>: Overall Picture {data-orientation=columns data-icon="fas fa-angle-double-right"}
+===================================================
+
+
+input sidebar{.sidebar}
+--------------------------------
+**This dashboard investigates two types of environmental measures**:
+
+- **GreenHouse Gas (GHG)** emission (page 1-3)
+- **Air Quality Index (AQI)** (page 4-5)
+
+Check [**About**](#about) page for more information.
+
+***
+***
+
+This page visualizes total and state-level GHG emission in US from 2011 to 2020.
+
+***
+***
+
+```{r sliderinput with animation}
+
+sliderInput(inputId = "year", label = "Select Year for F1 and F2:",
+            min = 2011, max = 2020, value = 2020, step = 1, sep = "",
+            animate = animationOptions(interval = 3000, loop = TRUE))
+
+```
+
+```{r selectInput for bar chart}
+
+state_lst <- sort(unique(GHG_all_states_11_20$iso_3166_2))
+
+selectizeInput("selectstates",
+               "Select States for F4 (compare up to 5 states):",
+               choices = state_lst,
+               multiple = TRUE,
+               selected = "VT",
+               options = list(maxItems = 5))
+
+```
+
+***
+***
+
+📔**Note**: **Metric for all GHG emission**: Tons CO2e
+
+Column {.tabset .tabset-fade data-width=750}
+-------------------------------------------------------------
+
+### F1: GHG Emission in US
+
+```{r choropleths with highcharter package}
+
+GHG_dat <- reactive({
+  GHG_all_states_11_20 %>% filter(year == input$year)
+  })
+
+renderHighchart({
+  hcmap("countries/us/us-all",
+      data = GHG_dat(),
+      value = "total",
+      joinBy = c("hc-a2","iso_3166_2"),
+      name = "total emission",
+      dataLabels = list(enabled = TRUE, format = "{point.name}"),
+      borderColor = "#FAFAFA",
+      borderWidth = 0.1,
+      tooltip = list(valueDecimals = 2)) %>% 
+  hc_colorAxis(stops = color_stops(colors = magma(n=10, direction = -1)),
+               min = 0,
+               max = max(GHG_all_states_11_20$total)) %>% 
+  hc_mapNavigation(enabled = TRUE)
+})
+
+```
+
+### F2: Treemap
+
+```{r Treemap state-level GHG emission for a year}
+
+renderHighchart({
+  hchart(GHG_dat(), "treemap", 
+         hcaes(x="iso_3166_2", value="total", color="total"),
+         tooltip = list(valueDecimals = 2)) %>% 
+    hc_colorAxis(stops = color_stops(colors = magma(n=10, direction = -1)),
+                 min = 0,
+                 max = max(GHG_all_states_11_20$total))
+})
+
+```
+
+### F3: US Total Emission Trend
+
+```{r bar & line chart total emission trend US}
+
+GHG_total_US_allyears <- 
+  GHG_all_states_11_20 %>% group_by(year) %>% 
+  summarize(allstates_total=sum(total))
+
+renderHighchart({
+hchart(GHG_total_US_allyears, "bar", 
+       name = "US total emission", # add name to change the text shown in tooltip
+       hcaes(x=year, y=allstates_total),
+       colorKey = "allstates_total",
+       tooltip = list(valueDecimals = 2)) %>% 
+  hc_add_series(GHG_total_US_allyears, "line",
+                name = "US total emission",
+                hcaes(x=year, y=allstates_total),
+                color = "#FE00CEFF",
+                tooltip = list(valueDecimals = 2)) %>% 
+  hc_colorAxis(stops = color_stops(colors = brewer.pal(n=8, name = "RdPu")),
+               min = 0,
+               max = max(GHG_total_US_allyears$allstates_total)) %>% 
+  # hc_colorAxis(stops = color_stops(colors = magma(n=10, direction = -1))) %>%
+  hc_xAxis(categories = GHG_total_US_allyears$year,
+           reversed = FALSE, # reverse the axis so 2011 is at the bottom
+           labels = list(step = 1),
+           title = list(text="")) %>% 
+  hc_yAxis(title = list(text="")) %>% 
+  hc_legend(enabled = FALSE) %>% 
+  hc_add_theme(hc_theme_economist())
+})
+
+```
+
+### F4: Trend for one or more States
+
+```{r bar chart total emission trend one or more states}
+
+renderHighchart({
+  if(length(input$selectstates) == 1){
+    GHG_onestate_11_20 <- 
+      filter(GHG_all_states_11_20, iso_3166_2 == input$selectstates)
+  
+    hchart(GHG_onestate_11_20, "bar",
+           name = "total emission", # add name to change the text shown in tooltip
+           hcaes(x=year, y=total),
+           colorKey = "total",
+           tooltip = list(valueDecimals = 2,
+                          pointFormat = paste("State: <b>{point.iso_3166_2}</b><br>", "total emission: <b>{point.y}</b>"))) %>% 
+      hc_add_series(GHG_onestate_11_20, "line",
+                    name = "total emission",
+                    hcaes(x=year, y=total),
+                    tooltip = list(valueDecimals = 2)) %>% 
+      hc_colorAxis(stops = color_stops(colors = brewer.pal(n=8, name = "OrRd")),
+                   min = 0,
+                   max = max(GHG_onestate_11_20$total)) %>% 
+      hc_xAxis(categories = GHG_onestate_11_20$year,
+               reversed = FALSE, # reverse the axis so 2011 is at the bottom
+               labels = list(step = 1),
+               title = list(text="")) %>% 
+      hc_yAxis(title = list(text="")) %>% 
+      hc_legend(enabled = FALSE) %>% 
+      hc_add_theme(hc_theme_ffx())
+  } else {
+    GHG_states_11_20 <- 
+      filter(GHG_all_states_11_20, iso_3166_2 %in% input$selectstates)
+  
+    hchart(GHG_states_11_20, "bar",
+       hcaes(x=year, y=total, group=iso_3166_2),
+       tooltip = list(valueDecimals = 2,
+                      pointFormat = paste("State: <b>{point.iso_3166_2}</b><br>", "total emission: <b>{point.y}</b>"))) %>% 
+      hc_xAxis(categories = GHG_states_11_20$year,
+               reversed = FALSE, # reverse the axis so 2011 is at the bottom
+               labels = list(step = 1),
+               title = list(text="")) %>% 
+      hc_yAxis(title = list(text="")) %>% 
+      hc_add_theme(hc_theme_ffx())
+  }
+})
+
+```
+
+
+Column {data-width=250}
+-----------------------------------------------------------------------
+
+### {}
+
+```{r data table}
+
+GHG_table <- reactive({GHG_dat() %>% 
+    mutate(State = iso_3166_2,
+           Rank=rank(desc(total), ties.method = "first")) %>% 
+    select(c(State, total, Rank))})
+
+renderDataTable(GHG_table(),options = list(scrollY = "170px", scrollX = TRUE,
+                                           dom = "ft",
+                                           pageLength = -1))
+
+```
+
+
+### Which states emit most GHG?
+
+```{r}
+
+renderValueBox(valueBox(paste0(input$year, " ","1st: ", 
+                               GHG_dat()[GHG_dat()$total == max(GHG_dat()$total),][2]),
+                        color="#800026FF", 
+                        icon = "fas fa-search-plus"))
+
+```
+
+### Which states emit most GHG?
+
+```{r}
+
+renderValueBox(valueBox(paste0(input$year, " ","2nd: ", 
+                               GHG_table()[GHG_table()$Rank == 2,][1]),
+                        color="#E31A1CFF", 
+                        icon = "fas fa-search-plus"))
+
+```
+
+
+### Which states emit most GHG?
+
+```{r}
+
+renderValueBox(valueBox(paste0(input$year, " ","3rd: ", 
+                               GHG_table()[GHG_table()$Rank == 3,][1]),
+                        color="#FD8D3CFF", 
+                        icon = "fas fa-search-plus"))
+
+```
+
+
+10-year Trend {data-orientation=columns data-icon="fas fa-angle-right"}
+==========================================
+
+input sidebar {.sidebar}
+-------------------------------------------------
+
+This page provides detailed GHG emission 10-year trend for 4 states.  
+
+***
+
+😄 The selected states are of my personal interest because the region where
+I currently live is within this area.😁
+
+***
+***
+
+```{r}
+
+selectInput("state","Select State: ", 
+            choices = c("Massachusetts"="MA", "New Hampshire"="NH", 
+                        "New York"="NY", "Vermont"="VT"),
+            selected = "Massachusetts")
+
+```
+
+***
+***
+
+The stacked area graphs illustrate overall trend of total GHG emission by either 
+Industry sectors (GHG sources) or GHG gas types. For each selected state, 
+geographic and important GHG information is also provided.
+
+***
+***
+
+📔**Note**: Click on the keys in the legend to turn off specific industry or gas types.
+
+
+Column {.tabset .tabset-fade data-width=720}
+-----------------------------------------------------------------
+
+### GHG Emission by Industry
+
+```{r stacked area GHG industry highcharter}
+
+# set colors for all industries and gas types:
+industry_names <- colnames(GHG_combined_11_20[, 11:19])
+gas_names <- colnames(GHG_combined_11_20[, 1:10])
+
+gastype_cols <- light.colors(n=length(gas_names)) # from Polychrome package
+gastype_cols <- setNames(gastype_cols, gas_names)
+industry_cols <- as.character(pal_unikn_pref) # a data frame from unikn package
+industry_cols <-setNames(industry_cols, industry_names)
+
+# create the data frame according to input
+GHG_onestate <- reactive({
+  GHG_combined_11_20 %>% filter(state == input$state)
+})
+
+# separately create data frame of industry for value box calculation
+GHG_onestate_industry <- reactive({
+  GHG_onestate_industry <- GHG_onestate()[, 11:21]
+  GHG_onestate_industry <- 
+    # use colSums() to remove columns with all 0 values
+    GHG_onestate_industry[, colSums(GHG_onestate_industry != 0) >0] %>% 
+    pivot_longer(-c("year","state"), 
+                 names_to = "Industry", values_to = "emission")
+  GHG_onestate_industry
+})
+
+renderHighchart({
+  # industry colors for the specific state
+  industry_cols_sub <- 
+    industry_cols[sort(unique(GHG_onestate_industry()$Industry))]
+  
+  hchart(GHG_onestate_industry(), "area",
+         hcaes(x=year, y=emission, group=Industry),
+         color=industry_cols_sub) %>% 
+    hc_plotOptions(area = list(stacking = "normal")) %>% 
+    hc_xAxis(categories = GHG_onestate_industry()$year,
+             labels = list(step = 1),
+             title = list(text="")) %>% 
+    hc_yAxis(title = list(text="")) %>% 
+    hc_tooltip(crosshairs = TRUE, borderWidth = 3)
+})
+
+```
+
+### GHG Emission by Gas Type
+
+```{r stacked area GHG gas type highcharter}
+
+renderHighchart({
+  GHG_onestate_gastype <- GHG_onestate()[, c(1:10,20,21)]
+  GHG_onestate_gastype <- 
+    GHG_onestate_gastype[, colSums(GHG_onestate_gastype != 0) >0] %>% 
+    pivot_longer(-c("year","state"), 
+                 names_to = "Gastype", values_to = "emission")
+  
+  # gastype colors for the specific state
+  gastype_cols_sub <- gastype_cols[sort(unique(GHG_onestate_gastype$Gastype))]
+  
+  hchart(GHG_onestate_gastype, "area",
+         hcaes(x=year, y=emission, group=Gastype),
+         color=gastype_cols_sub) %>% 
+    hc_plotOptions(area = list(stacking = "normal")) %>% 
+    hc_xAxis(categories = GHG_onestate_gastype$year,
+             labels = list(step = 1),
+             title = list(text="")) %>% 
+    hc_yAxis(title = list(text="")) %>% 
+    hc_tooltip(crosshairs = TRUE, borderWidth = 3)
+})
+
+```
+
+Column {data-width=280}
+---------------------------------------------
+
+### Geographic Information
+
+```{r map for 4 states with sf package}
+
+# map: highlight a state according to input
+## the map data uses usa_sf(), not "laea" project
+select_states_sf <- 
+  usa_sf() %>% filter(iso_3166_2 %in% c("NH","VT","MA","NY"))
+
+cty_sf <- counties_sf() # counties sf data in albersusa package
+
+# adjust position of text label for states
+select_states_sf$xnudge <- 0
+select_states_sf$ynudge <- 0
+select_states_sf$xnudge[select_states_sf$iso_3166_2 == "NH"] <- 0.4
+select_states_sf$ynudge[select_states_sf$iso_3166_2 == "NH"] <- -0.4
+select_states_sf$ynudge[select_states_sf$iso_3166_2 == "VT"] <- 0.1
+select_states_sf$ynudge[select_states_sf$iso_3166_2 == "MA"] <- 0.2
+
+renderPlot({
+  plt <- ggplot() + 
+    geom_sf(data = cty_sf, fill="white", color="gray") +     
+    # borders of all counties
+    geom_sf(data = select_states_sf, fill="#A6E1F4FF", 
+            alpha=0.3, color="#008ECEFF", size=1) +
+    # borders of selected states
+    geom_sf(data = filter(select_states_sf, iso_3166_2 == input$state),
+            fill="#ea4335", alpha=0.5) +
+    # highlight a single state selected by input value ("Vermont" by default)
+    geom_sf_text(data = select_states_sf,
+                 aes(label=name),
+                 nudge_x = select_states_sf$xnudge,
+                 nudge_y = select_states_sf$ynudge,
+                 color="#666666FF", size=4.5) +
+    # add state text label
+    coord_sf(crs = st_crs(usa_sf())) +
+    coord_sf(xlim = c(-80,-70), ylim = c(40.5,46)) +
+    theme_void()
+  
+  plt
+})
+
+```
+
+### emission decreased by (2020 vs.2011)
+
+```{r}
+
+value_percent <- reactive({
+  value_percent <- (sum(filter(GHG_onestate_industry(), year == 2011)$emission) - sum(filter(GHG_onestate_industry(), year == 2020)$emission)) / sum(filter(GHG_onestate_industry(), year == 2011)$emission) * 100
+  
+  round(value_percent, 3)
+})
+
+renderValueBox(valueBox(paste0(value_percent(), "%"),
+                        color="#34a853",
+                        icon = "far fa-arrow-alt-circle-down"))
+
+```
+
+### total GHG industries
+
+```{r}
+
+renderValueBox(valueBox(length(unique(GHG_onestate_industry()$Industry)),
+                        color="#FF7F00FF",icon = "fas fa-calculator"))
+
+```
+
+### dominant GHG industry
+
+```{r}
+
+renderValueBox(valueBox(ifelse(input$state == "VT",
+                               "Electronics Manufac",
+                               "Power Plants"),
+                        color="#D01556FF",icon = "fas fa-industry"))
+
+```
+
+
+For a Year {data-icon="fas fa-angle-right"}
+==========================================
+
+input sidebar {.sidebar}
+-------------------------------------------------
+
+For a specific state, we can further zoom in on a single year.🔎
+
+***
+***
+
+```{r selectInput and sliderInput for GHG}
+
+# shiny input: select a state from (MA, NH, NY, VT)
+selectInput("State","Select State: ", 
+            choices = c("Massachusetts"="MA", "New Hampshire"="NH", 
+                        "New York"="NY", "Vermont"="VT"),
+            selected = "Massachusetts")
+
+# shiny input: select a year
+sliderInput(inputId = "Year", label = "Select Year:",
+            min = 2011, max = 2020, value = 2020, step = 1, sep = "")
+
+```
+
+***
+***
+
+This page shows a selected state's yearly GHG emission by both industry and gas
+type (bar charts), as well as the relation between them (alluvial diagram) which 
+directly shows how each industry contributes to different types of GHG.
+
+***
+
+In some alluvial diagrams, some industry sectors and GHG types can be hardly seen 
+in stratum since they take much less part than the others in total emission.
+
+
+Row {data-height=650}
+----------------------------------
+
+### Alluvial Diagram {data-width=750}
+
+```{r GHG alluvial diagram}
+
+# a list of data frames for alluvial diagram
+dat_lst <- list(MA = GHG_MA_allu_11_20, NH = GHG_NH_allu_11_20,
+                NY = GHG_NY_allu_11_20, VT = GHG_VT_allu_11_20)
+
+# a list of numbers used for pivoting, determine how many columns to pivot first
+num_lst <- list(MA = 8, NH = 3, NY = 10, VT = 10)
+
+# set colors for all industrys and gas types (for all 4 data frames):
+gasnames <- colnames(dat_lst[["NY"]][, 2:11]) # NY data frame has all gas types
+indusnames <- 
+  unique(c(colnames(dat_lst[["MA"]][, -1]), colnames(dat_lst[["NH"]][, -1]),
+           colnames(dat_lst[["NY"]][, -1]), colnames(dat_lst[["VT"]][, -1])))
+indusnames <- indusnames[!(indusnames %in% c(gasnames, "year", "state"))]
+
+colornames <- c(indusnames, gasnames)
+mypalette <- palette36.colors(n=length(colornames)) # from Polychrome package
+mypalette <- setNames(mypalette, colornames)
+
+# create data frame according to input
+GHG_onestate_allu <- reactive({
+  dat_lst[[input$State]] %>% filter(year == input$Year) %>% 
+    select(-c("Reported Subsectors")) %>% 
+    pivot_longer(c(1:num_lst[[input$State]]), 
+                 names_to = "Gastype", values_to = "emission") %>% 
+    pivot_longer(-c("Gastype","emission","year","state"),
+                 names_to = "Industry", values_to = "emission_subtotal") %>% 
+    filter(emission_subtotal != 0, emission != 0) %>% 
+    select(c("Industry","Gastype","emission"))
+})
+
+# create visualization
+renderPlot({
+  # get subset colors for specific data frame
+  lev1 <- levels(as.factor(GHG_onestate_allu()$Industry))
+  lev2 <- levels(as.factor(GHG_onestate_allu()$Gastype))
+
+  industry_colors <- mypalette[lev1]
+  gastype_colors <- mypalette[lev2]
+  all_colors <- c(industry_colors, gastype_colors)
+  stratcols <- c(rev(industry_colors), rev(gastype_colors))
+  
+  plt <- ggplot(GHG_onestate_allu(),
+                aes(axis1=Industry,axis2=Gastype,y=emission)) +
+    geom_alluvium(aes(fill=Industry), alpha=0.5, width=1/8) +
+    # next set the flow colors
+    scale_fill_manual(values = industry_colors) +
+    # next set the stratum, assign different colors to each stratum with fill
+    geom_stratum(width=1/8, fill = paste0(stratcols), alpha=1,
+                 color="white", size=0.6) +
+    # next text labels for left side stratum (Industry)
+    geom_text_repel(stat="stratum",
+                    aes(label = ifelse(after_stat(x) == 1,
+                                       as.character(after_stat(stratum)), "")),
+                    color = stratcols,
+                    family = "serif",
+                    size = 4,
+                    fontface = "bold",
+                    direction = "y",
+                    hjust = 1,
+                    nudge_x = -0.7,
+                    segment.size = 0.7,
+                    segment.alpha = 0.7,
+                    segment.linetype = "dashed",
+                    box.padding = 0.4) +
+    # next text labels for right side stratum (Gastype)
+    geom_text_repel(stat="stratum",
+                    aes(label = ifelse(after_stat(x) == 2,
+                                       as.character(after_stat(stratum)), "")),
+                    color = stratcols,
+                    family = "serif",
+                    size = 4,
+                    fontface = "bold",
+                    direction = "y",
+                    hjust = 0,
+                    nudge_x = 0.2,
+                    segment.size = 0.7,
+                    segment.alpha = 0.8,
+                    segment.linetype = "dashed",
+                    box.padding = 0.8) +
+    scale_y_continuous(labels = comma, expand = c(0, 0)) +
+    scale_x_discrete(limits = c("Industry", "Gastype"), expand = c(0.4, 0.4)) +
+    theme_tufte() +            # from ggthemes package
+    labs(y="") +
+    theme(legend.position = "none",
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.text.x = element_text(size = 12, face = "bold"))
+  
+  plt
+})
+
+```
+
+### {data-width=250}
+
+```{r data table 2}
+
+renderDataTable(GHG_onestate_allu() %>% rename(Gas = Gastype),
+                options = list(scrollY = "245px",scrollX = TRUE,
+                               dom = "ft", pageLength = -1))
+
+```
+
+Row {data-height=350}
+-------------------------------------
+
+### GHG Emission by Industry
+
+```{r bar chart GHG by industry}
+
+GHG_onestate_industry_bar <- reactive({
+  GHG_onestate_industry_bar <- 
+    GHG_combined_11_20 %>% filter(year == input$Year, state == input$State) %>% 
+    select(c(11:21))
+  
+  GHG_onestate_industry_bar <- 
+  GHG_onestate_industry_bar[, colSums(GHG_onestate_industry_bar != 0) > 0] %>% 
+  pivot_longer(-c(year, state), names_to = "Industry", values_to = "emission")
+  
+  GHG_onestate_industry_bar
+})
+
+renderPlotly({
+  plt <- ggplot(data=GHG_onestate_industry_bar(),
+                aes(y=reorder(Industry, emission), x=emission, fill=emission,
+                    text = paste0("Industry: ", Industry,
+                                  "\nemission: ", emission))) +
+    geom_bar(stat = "identity", width = 0.7) +
+    scale_x_continuous(labels = comma) +
+    scale_y_discrete(expand = c(0,0)) +
+    scale_fill_carto_c(palette = "SunsetDark", 
+                       limits = c(0, max(GHG_combined_11_20[, 11:19]))) + 
+    # palette from rcartocolor package
+    theme_minimal() +
+    labs(y="", x="") +
+    theme(axis.text.x = element_text(angle = 0, size = 6),
+          axis.text.y = element_text(size = 9, family = "serif"),
+          panel.grid.major.y = element_blank(),
+          plot.margin = margin(0,0,0,0),
+          legend.position = "none",
+          aspect.ratio = 1/2)
+  
+  ggplotly(plt)
+})
+
+```
+
+### GHG Emission by Gas Type
+
+```{r bar chart GHG by gas type}
+
+GHG_onestate_gastype_bar <- reactive({
+  GHG_onestate_gastype_bar <- 
+    GHG_combined_11_20 %>% filter(year == input$Year, state == input$State) %>% 
+    select(c(1:10,20,21))
+  
+  GHG_onestate_gastype_bar <- 
+  GHG_onestate_gastype_bar[, colSums(GHG_onestate_gastype_bar != 0) > 0] %>% 
+  pivot_longer(-c(year, state), names_to = "Gastype", values_to = "emission")
+  
+  GHG_onestate_gastype_bar
+})
+
+renderPlotly({
+  plt <- ggplot(data=GHG_onestate_gastype_bar(),
+                aes(y=reorder(Gastype, emission), x=emission, fill=emission,
+                    text = paste0("Gas type: ", Gastype,
+                                  "\nemission: ", emission))) +
+    geom_bar(stat = "identity", width = 0.7) +
+    scale_x_continuous(labels = comma) +
+    scale_y_discrete(expand = c(0,0)) +
+    scale_fill_carto_c(palette = "Teal", 
+                       limits = c(0, max(GHG_combined_11_20[, 1:10]))) + 
+    # palette from rcartocolor package
+    theme_minimal() +
+    labs(y="", x="") +
+    theme(axis.text.x = element_text(angle = 0, size = 6),
+          axis.text.y = element_text(size = 9, family = "serif"),
+          panel.grid.major.y = element_blank(),
+          plot.margin = margin(0,0,0,0),
+          legend.position = "none",
+          aspect.ratio = 1/2)
+  
+  ggplotly(plt, tooltip = "text")
+})
+
+```
+
+
+<span style="color:#FFFF99FF"><font size="4">**AQI** </font></span>: 11-year trend {data-orientation=rows data-icon="fas fa-angle-double-right"}
+================================================================
+
+input sidebar {.sidebar}
+-------------------------------------------------
+
+Now let's look further into AQI data, which involves 6 areas within 4 previously 
+studied states.
+
+***
+***
+
+```{r}
+
+# shiny input: select an area out of 6.
+selectInput("area","Select an Area: ", 
+            choices = c("Chautauqua, NY"="Chau", "Coos, NH"="Coos", 
+                        "Hamilton, NY"="Hami", "New York City, NY"="NYC",
+                        "Rutland, VT"="Rutl", "Worcester, MA"="Worc"),
+            selected = "Worc")
+
+```
+
+***
+***
+
+This page shows the selected area's geographic location and focuses mainly on 
+displaying AQI summary and changing trend in these areas over 11 years (2011-2021).
+
+***
+
+**AQI Value range & categories**:
+
+- Good (0-50)
+- Moderate (51-100)
+- Unhealthy for Sensitive Groups (101-150)
+- Unhealthy (151-200)
+- Very Unhealthy (201-300)
+- Hazardous (301-500)
+
+**For a specific day**: 
+
+**Overall AQI Value** = maximum of all Pollutants' AQI values
+
+Row {.tabset .tabset-fade data-height=830}
+-----------------------------------------------------------------
+
+### Area Geographic Locations
+
+```{r map for 6 areas with sf package}
+# map: highlight an area according to input
+## the map data uses usa_sf(), not "laea" project
+select_states_sf <- 
+  usa_sf() %>% filter(iso_3166_2 %in% c("NH","VT","MA","NY"))
+
+cty_sf <- counties_sf() # counties sf data in albersusa package
+
+select_cty_sf <- 
+  counties_sf() %>% 
+  filter(name %in% c("Rutland","Worcester","Coos","Chautauqua","Hamilton",
+                     "New York","Kings","Queens","Bronx","Richmond"),
+         iso_3166_2 %in% c("VT","MA","NH","NY"))
+
+# adjust position of text labels for states
+select_states_sf$xnudge <- 0
+select_states_sf$ynudge <- 0
+select_states_sf$xnudge[select_states_sf$iso_3166_2 == "NH"] <- 0.4
+select_states_sf$ynudge[select_states_sf$iso_3166_2 == "NH"] <- -0.4
+select_states_sf$ynudge[select_states_sf$iso_3166_2 == "VT"] <- 0.1
+select_states_sf$ynudge[select_states_sf$iso_3166_2 == "MA"] <- 0.2
+
+# adjust position of text label for counties
+select_cty_sf_sub <- select_cty_sf %>% 
+  filter(!(name %in% c("New York","Queens","Kings","Bronx","Richmond")))
+
+select_cty_sf_sub$xnudge <- 0
+select_cty_sf_sub$ynudge <- 0
+select_cty_sf_sub$ynudge[select_cty_sf_sub$iso_3166_2 %in% c("VT","NY","MA")] <- -0.45
+select_cty_sf_sub$xnudge[select_cty_sf_sub$iso_3166_2 == "NH"] <- 0.6
+select_cty_sf_sub$xnudge[select_cty_sf_sub$iso_3166_2 == "MA"] <- -0.1
+
+select_cty_sf$name_new <- as.character(select_cty_sf$name) # unfactorize the string
+
+select_cty_sf$name_new[select_cty_sf$name_new %in% c("New York","Kings","Queens","Bronx","Richmond")] <- "NYC"
+
+select_cty_sf$name_new <- substr(select_cty_sf$name_new, 0, 4)
+# extract the first 4 letters of the name
+
+renderPlot({
+  ggplot() + 
+  geom_sf(data = cty_sf,
+          fill="lightgrey", alpha=0.2, color="gray") +     
+  # borders of all counties
+  geom_sf(data = select_states_sf, 
+          fill="transparent", size=1, color="#008ECEFF") +
+  # borders of selected states
+  geom_sf(data = select_cty_sf, fill="#A6E1F4FF", alpha=0.7) +
+  # highlight selected counties
+  geom_sf(data = filter(select_cty_sf, name_new == input$area),
+          fill="#ea4335", alpha=0.7) +
+  # highlight a single area selected by input value
+  geom_sf_text(data = select_states_sf,
+               aes(label=name),
+               nudge_x = select_states_sf$xnudge,
+               nudge_y = select_states_sf$ynudge,
+               color="darkgray", size=7) +
+  # add state text label
+  geom_sf_text(select_cty_sf_sub,
+               mapping=aes(label=name),
+               nudge_x = select_cty_sf_sub$xnudge,
+               nudge_y = select_cty_sf_sub$ynudge,
+               size=5,
+               family="serif") +
+  # add county text label (except NY city)
+  geom_text(data = select_states_sf, x=-75, y=40.8, 
+            label="New York City", size=5,
+            family="serif") +
+  # add New York City text label (including 5 counties) 
+  coord_sf(crs = st_crs(usa_sf())) +
+  coord_sf(xlim = c(-80,-70), ylim = c(40.5,46)) +
+  theme_void()
+})
+
+```
+
+### AQI Value Monthly Trend
+
+```{r AQI monthly trend line chart interactivity with plotly}
+
+# data frame list
+AQI_monthly_dat_lst <- list(Chau = AQI_Chau_11_21_monthly, 
+                            Coos = AQI_Coos_11_21_monthly,
+                            Hami = AQI_Hami_11_21_monthly,
+                            NYC = AQI_NYC_11_21_monthly,
+                            Rutl = AQI_Rutl_11_21_monthly,
+                            Worc = AQI_Worc_11_21_monthly)
+
+# set colors for 6 lines (for all 6 data frames):
+color_names <- 
+  c("Overall AQI monthly average", "Ozone AQI monthly average", 
+    "PM25 AQI monthly average","NO2 AQI monthly average",
+    "CO AQI monthly average","PM10 AQI monthly average")
+
+mypal <- c("#FD3216FF", "#67DBA5FF", "#68ABB8FF", 
+           "#F8A07EFF", "#FF7F00FF", "#33A02CFF")
+mypal <- setNames(mypal, color_names)
+
+# line chart: monthly average AQI, ggplotly
+
+renderPlotly({
+  # get the data frame according to input
+  AQI_monthly_onearea <- AQI_monthly_dat_lst[[input$area]]
+  
+  # get AQI types in the data frame
+  color_names_sub <-
+    colnames(select(AQI_monthly_onearea,
+                    -c("Date","area","Overall AQI monthly low",
+                       "Overall AQI monthly high")))
+  # get subset of colors
+  cols_sub <- mypal[color_names_sub]
+  
+  # create visualization
+  plt <- ggplot() +
+    # first fill between monthly high and low (wide data frame)
+    geom_ribbon(data=AQI_monthly_onearea,
+                aes(x=Date, 
+                    ymin=`Overall AQI monthly low`,
+                    ymax=`Overall AQI monthly high`,
+                    fill="Overall AQI monthly low/high"),
+                alpha=0.5) +
+    # set fill manually for ribbon
+    scale_fill_manual(name="", values = "#CCCCCCFF") +
+    # overall AQI average line
+    geom_line(data=AQI_monthly_onearea, 
+              aes(x=Date, 
+                  y=`Overall AQI monthly average`, 
+                  color="Overall AQI monthly average",
+                  text = paste0("month: ", format(Date, "%Y-%m"), "\n", 
+                                "Overall AQI monthly average", "\n",
+                                "AQI value: ", `Overall AQI monthly average`)), 
+              group=1, size=1.8, alpha=0.8) +
+    # next lines for other types of AQI
+    geom_line(data=pivot_longer(AQI_monthly_onearea, 
+                                -c("Date", "area",
+                                   "Overall AQI monthly low",
+                                   "Overall AQI monthly average",
+                                   "Overall AQI monthly high"), 
+                                names_to = "group",
+                                values_to = "value"),
+              aes(x=Date, y=value, group=group, color=group,
+                  text=paste0("month: ", format(Date, "%Y-%m"), "\n", 
+                              group, "\n",
+                              "AQI value: ", value)),
+              size=0.5) +
+    # manually set colors of all lines
+    scale_color_manual("", values = cols_sub) +
+    scale_x_date(date_breaks = "1 year", date_labels = "%Y",
+                 limits = c(as.Date("2011-01-01"), as.Date("2021-12-31")),
+                 expand = c(0,0)) +
+    scale_y_continuous(expand = c(0,0), breaks = seq(0,250,50), 
+                       limits = c(0,max(AQI_monthly_onearea$`Overall AQI monthly high`) + 5)) +
+    labs(x="", y="") +
+    theme_tufte() +
+    theme(panel.grid.major.y = element_line(color = "gray",
+                                            linetype = "dashed",
+                                            size = 0.5),
+          legend.spacing.y = unit(-0.3,"cm"),
+          legend.text = element_text(size = 8),
+          legend.box.margin = margin(0,0,-10,0))
+  
+  p <- ggplotly(plt, tooltip = "text", dynamicTicks = TRUE) %>% 
+    rangeslider() %>% layout(hovermode = "x",
+                             xaxis = list(nticks=11),
+                             yaxis = list(tick0=0, dtick=50))
+  
+  # change the legend manually
+  # for trace 1-2
+  p <- style(p, name = "Overall AQI monthly low/high", traces = 1)
+  p <- style(p, name = "Overall AQI monthly average", traces = 2)
+  
+  # for the following traces
+  legendnames <- sort(color_names_sub[-1])
+  for (i in seq_along(legendnames)){
+    p <- style(p, name = legendnames[i], traces = i+2)
+  }
+  
+  p
+})
+
+```
+
+### AQI Daily Heatmap
+
+```{r AQI heatmap 11-year comparison}
+
+# data frame list
+AQI_dat_lst <- list(Chau = AQI_Chau_11_21, Coos = AQI_Coos_11_21, 
+                    Hami = AQI_Hami_11_21, NYC = AQI_NYC_11_21, 
+                    Rutl = AQI_Rutl_11_21, Worc = AQI_Worc_11_21)
+# set x axis labels
+x_breaks <- c("01-01","02-01","03-01","04-01","05-01","06-01",
+              "07-01","08-01","09-01","10-01","11-01","12-01")
+x_labels <- unique(format(AQI_Chau_11_21$Date, "%b")) # a list of month ("Jan",...)
+
+# get the data frame according to input
+  AQI_onearea <- reactive({
+    AQI_dat_lst[[input$area]] %>% 
+      mutate(Year = year(Date), month_day = format(Date, "%m-%d")) %>%
+      filter(month_day != "02-29")
+})
+
+# create visualization
+renderPlotly({
+  plt <- 
+    ggplot(data = AQI_onearea(),
+           aes(x=month_day, y=Year, fill=`Overall AQI Value`,
+               text = paste0("Date: ", Year, "-", month_day, "\n",
+                             "Overall AQI value: ", `Overall AQI Value`))) +
+    geom_tile() +
+    geom_hline(yintercept = seq(2011.5, 2020.5, 1),
+               color="white", size=0.5) +
+    scale_x_discrete(breaks = x_breaks, labels = x_labels) +
+    scale_y_continuous(breaks = c(2011:2021), labels = c(2011:2021),
+                       expand = expansion(add = c(0, 0))) +
+    scale_fill_gradientn(name="AQI range",
+                         colors = c("#34a853","yellow","orange",
+                                    "red","purple","maroon","maroon"),
+                         values = c(0, 0.11, 0.20, 0.30, 0.49, 0.7, 1),
+                         breaks = c(0,50,100,150,200,300,500),
+                         limits = c(0,500)) +
+    labs(x="", y="") +
+    theme_tufte() +
+    theme(legend.title = element_text(size = 9),
+          # legend.direction = "horizontal",
+          legend.key.width = unit(0.8, "cm"),
+          legend.key.height = unit(8, "cm"),
+          legend.text = element_text(angle = 0, size = 8, hjust = 0),
+          legend.box.margin = margin(0,0,-25,0))
+  
+  ggplotly(plt, tooltip = "text")
+})
+
+```
+
+### Boxplot & Scatter plot
+
+```{r AQI boxplot & scatter plot}
+
+renderPlotly({
+  plt <- 
+  ggplot(data = AQI_onearea(),
+         aes(x=Year, y=`Overall AQI Value`)) +
+  geom_jitter(aes(color=`Overall AQI Value`,
+                  text=paste0(Year,"-",month_day,"\n",
+                              "Overall AQI Value: ", `Overall AQI Value`)), 
+              alpha=0.3, size=0.8) +
+  scale_color_gradientn("AQI range",
+                        colors = c("#34a853","yellow","orange",
+                                   "red","purple","maroon","maroon"),
+                        values = c(0, 0.11, 0.20, 0.30, 0.49, 0.7, 1),
+                        breaks = c(0,50,100,150,200,300,500),
+                        limits = c(0,500)) +
+  scale_x_continuous(breaks = c(2011:2022)) +
+  labs(x="", y="") +
+  theme_tufte() +
+  theme(panel.grid.major.y = element_line(color = "gray", 
+                                          linetype = "dashed",
+                                          size = 0.5),
+        legend.title = element_text(size = 9),
+        legend.key.width = unit(0.8, "cm"),
+        legend.key.height = unit(3, "cm"),
+        legend.text = element_text(angle = 0, size = 8, hjust = 0),
+        legend.box.margin = margin(0,0,-25,0))
+
+p <- ggplotly(plt, tooltip = "text")
+
+# use plotly to plot boxplot directly instead of using ggplot
+p %>% add_trace(x=~Year, y=~`Overall AQI Value`,
+                type="box",
+                alpha = 0.1,
+                boxpoints="outliers",
+                marker = list(color = "#4285f4"), # control outlier color
+                line = list(color = "#4285f4"), # control line color of box
+                text=~`Overall AQI Value`,
+                hoverinfo = "text",
+                mode = "markers"
+                  )
+})
+
+```
+
+### Boxplot & Scatter plot (animation)
+
+```{r AQI boxplot & scatter plot with plotly animation}
+
+renderPlotly({
+  plt <- 
+  ggplot(data = AQI_onearea(),
+         aes(x=Year, y=`Overall AQI Value`)) +
+  geom_jitter(aes(color=`Overall AQI Value`,
+                  text=paste0(Year,"-",month_day,"\n",
+                              "Overall AQI Value: ", `Overall AQI Value`),
+                  frame=Year, ids=month_day), 
+              alpha=0.5, size=0.8) +
+  scale_color_gradientn(name="AQI range",
+                        colors = c("#34a853","yellow","orange",
+                                   "red","purple","maroon","maroon"),
+                        values = c(0, 0.11, 0.20, 0.30, 0.49, 0.7, 1),
+                        breaks = c(0,50,100,150,200,300,500),
+                        limits = c(0,500)) +
+  scale_x_continuous(breaks = c(2011:2022)) +
+  labs(x="", y="") +
+  theme_tufte() +
+  theme(panel.grid.major.y = element_line(color = "gray", 
+                                          linetype = "dashed",
+                                          size = 0.5),
+        legend.position = "none")
+
+p <- ggplotly(plt, tooltip = "text")
+
+# use plotly to plot boxplot directly instead of using ggplot
+p %>% add_trace(x=~Year, y=~`Overall AQI Value`,
+                type="box",
+                alpha = 0,
+                boxpoints="outliers",
+                marker = list(color = "red"), # control color of outliers
+                line = list(color = "red"), # control line color of box
+                frame=~Year,
+                text=~`Overall AQI Value`,
+                hoverinfo = "text",
+                mode = "markers"
+                  ) %>% 
+  animation_opts(frame=2000, easing="elastic", transition = 500,
+                 mode = "next")
+})
+
+```
+
+
+Row {data-height=170}
+---------------------------------------------
+
+### Total AQI Pollutants
+
+```{r}
+
+renderValueBox({
+  num <- length(colnames(select(AQI_dat_lst[[input$area]], 
+                                -c("Date", "Overall AQI Value",
+                                   "Main Pollutant", "AQI_max (2000-2021)",
+                                   "AQI_min (2000-2021)", "area"))))
+  
+  valueBox(num, color="#6699CCFF", icon = "fas fa-calculator")})
+
+```
+
+### Main AQI Pollutant
+
+```{r}
+
+renderValueBox({
+  name <- 
+    names(sort(table(AQI_dat_lst[[input$area]]$`Main Pollutant`), decreasing = TRUE))[1]
+  
+  valueBox(name, color="#FE88B1FF", icon = "fas fa-exclamation")})
+
+```
+
+### 11-year AQI Good
+
+```{r}
+
+renderValueBox({
+ num <- 
+   nrow(AQI_dat_lst[[input$area]] %>% filter(`Overall AQI Value` <= 50))/nrow(AQI_dat_lst[[input$area]]) * 100
+ 
+ num <- round(num, 3)
+  
+ valueBox(paste0(num,"%"), color="#34a853", icon = "far fa-thumbs-up")})
+
+```
+
+### 11-year AQI (Very) Unhealthy
+
+```{r}
+
+renderValueBox({
+ num <- 
+   nrow(AQI_dat_lst[[input$area]] %>% filter(`Overall AQI Value` > 200))/nrow(AQI_dat_lst[[input$area]]) * 100
+ 
+ num <- round(num, 3)
+  
+ valueBox(paste0(num,"%"), color="#ea4335", icon = "far fa-thumbs-down")})
+
+```
+
+
+For a Year {data-icon="fas fa-angle-right"}
+==========================================
+
+input sidebar {.sidebar}
+-------------------------------------------------
+
+For a specific area, we can further zoom in on a single year.🔎
+
+***
+***
+
+```{r selectInput and sliderInput for AQI}
+
+# shiny input: select an area out of 6
+selectInput("Area","Select an Area: ", 
+            choices = c("Chautauqua, NY"="Chau", "Coos, NH"="Coos", 
+                        "Hamilton, NY"="Hami", "New York City, NY"="NYC",
+                        "Rutland, VT"="Rutl", "Worcester, MA"="Worc"),
+            selected = "Worc")
+
+# shiny input: select a year (2011-2021)
+sliderInput(inputId = "YEAR", label = "Select a Year:",
+            min = 2011, max = 2021, value = 2021, step = 1, sep = "")
+
+```
+
+***
+***
+
+This page shows AQI value daily trend over a single year for an area, with all 
+pollutants' AQI values for the area being plotted and compared on the daily basis.
+
+***
+
+📔**Note**: 
+
+- SG = Sensitive Group
+- Click on the keys in the legend to turn off specific pollutant types.
+
+Row {data-height=160}
+------------------------------------------------------------
+
+### days of Good
+
+```{r}
+# use AQI_dat_lst in chunk 26
+AQI_onearea_oneyear <- reactive({
+  AQI_dat_lst[[input$Area]] %>%
+  mutate(Year = year(Date), month_day = format(Date, "%m-%d")) %>%
+  filter(Year == input$YEAR)
+})
+
+renderValueBox({
+  num <- nrow(AQI_onearea_oneyear() %>% filter(`Overall AQI Value` <= 50))
+  
+  valueBox(num, color="#34a853", icon = "far fa-smile")
+})
+
+```
+
+### days of Moderate
+
+```{r}
+
+renderValueBox({
+  num <- nrow(AQI_onearea_oneyear() %>% 
+                filter(`Overall AQI Value` > 50, `Overall AQI Value` <= 100))
+  
+  valueBox(num, color="#F6F926FF", icon = "far fa-meh")
+})
+
+```
+
+### days of Unhealthy for SG
+
+```{r}
+
+renderValueBox({
+  num <- nrow(AQI_onearea_oneyear() %>% 
+                filter(`Overall AQI Value` > 100, `Overall AQI Value` <= 150))
+  
+  valueBox(num, color="orange", icon = "far fa-meh-rolling-eyes")
+})
+
+```
+
+### days of Unhealthy
+
+```{r}
+
+renderValueBox({
+  num <- nrow(AQI_onearea_oneyear() %>% 
+                filter(`Overall AQI Value` > 150, `Overall AQI Value` <= 200))
+  
+  valueBox(num, color="red", icon = "far fa-frown")
+})
+
+```
+
+### days of Very Unhealthy
+
+```{r}
+
+renderValueBox({
+  num <- nrow(AQI_onearea_oneyear() %>% 
+                filter(`Overall AQI Value` > 200, `Overall AQI Value` <= 300))
+  
+  valueBox(num, color="purple", icon = "far fa-sad-cry")
+})
+
+```
+
+
+Row {.tabset .tabset-fade data-height=840}
+--------------------------------------------------
+
+### Daily AQI Value for a Year
+
+```{r AQI daily for an area & year line chart interactivity}
+
+# set colors for 6 lines (for all 6 data frames):
+Col_names <-
+  c("Overall AQI Value", "Ozone", "PM25", "NO2", "CO", "PM10")
+
+Mypal <- c("#FD3216FF", "#67DBA5FF", "#68ABB8FF", 
+           "#F8A07EFF", "#FF7F00FF", "#33A02CFF")
+Mypal <- setNames(Mypal, Col_names)
+
+# use data frame in chunk 34 (AQI_onearea_oneyear())
+renderPlotly({
+  # get AQI types in the data frame
+  Col_names_sub <-
+    colnames(select(AQI_onearea_oneyear(),
+                    -c("Date","Year","month_day","area","Main Pollutant",
+                       "AQI_min (2000-2021)","AQI_max (2000-2021)")))
+  # get subset of colors
+  Cols_sub <- Mypal[Col_names_sub]
+  
+  # create visualization
+  plt <- ggplot(data=AQI_onearea_oneyear()) +
+  # geom_ribbon and a line for overall AQI value use wide data frame
+  geom_ribbon(aes(x=Date, 
+                  ymin=`AQI_min (2000-2021)`,
+                  ymax=`AQI_max (2000-2021)`,
+                  fill="Overall AQI low/high (2000-2021)"),
+              alpha=0.5) +
+  # set fill manually for ribbon
+  scale_fill_manual(name="", values = "#CCCCCCFF") +
+  # overall AQI line (add argument group=1)
+  geom_line(aes(x=Date, 
+                y=`Overall AQI Value`, 
+                color="Overall AQI Value",
+                text = paste0("Date: ", Date, "\n", 
+                              "Overall AQI Value: ", `Overall AQI Value`,"\n",
+                              "Main Pollutant: ",`Main Pollutant`)), 
+            group=1, size=1) +
+  # next lines for other types of AQI (long data frame)
+  geom_line(data=pivot_longer(AQI_onearea_oneyear(), 
+                              -c("Date","Year","month_day","area",
+                                 "Main Pollutant",
+                                 "AQI_min (2000-2021)",
+                                 "Overall AQI Value",
+                                 "AQI_max (2000-2021)"), 
+                              names_to = "group",
+                              values_to = "value"),
+            aes(x=Date, y=value, group=group, color=group,
+                text=paste0("Date: ", Date, "\n", 
+                            group," AQI: ", value)),
+            size=0.3) +
+  # manually set colors of all lines
+  scale_color_manual("", values = Cols_sub) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b",
+               # limits = c(as.Date("2011-01-01"), as.Date("2021-12-31")),
+               expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(x="", y="") +
+  theme_tufte() +
+  theme(panel.grid.major.y = element_line(color = "gray", 
+                                          linetype = "dashed",
+                                          size = 0.5),
+        legend.spacing.y = unit(-0.3,"cm"),
+        aspect.ratio = 1/2)
+
+  p <- ggplotly(plt, tooltip = "text", dynamicTicks = TRUE) %>% 
+    rangeslider() %>%
+    layout(hovermode = "x",
+           xaxis = list(nticks=12),yaxis = list(tick0=0, dtick=50)
+           )
+  
+  # change the legend manually
+  # for trace 1-2
+  p <- style(p, name = "Overall AQI low/high\n(2000-2021)", traces = 1)
+  p <- style(p, name = "Overall AQI Value", traces = 2)
+  
+  # for the following traces
+  legendnames <- sort(Col_names_sub[-1])
+  for (i in seq_along(legendnames)){
+    p <- style(p, name = legendnames[i], traces = i+2)
+  }
+  
+  p
+})
+
+```
+
+### Daily Overall AQI animation 1
+
+```{r overall AQI daily for an area line chart animation}
+
+# get data frame according to input (only Area)
+  AQI_onearea_anim <- reactive({
+    AQI_dat_lst[[input$Area]] %>% 
+      mutate(Year = year(Date), month_day = format(Date, "%m-%d")) %>%
+      filter(month_day != "02-29")
+})
+# only plot a single line: overall AQI Value
+# x axis use month_day column, remove 02-29 in leap year
+# x axis labels use x_breaks and x_labels for heatmap plotting in chunk 26
+
+renderPlotly({
+
+  plt <- ggplot(data=AQI_onearea_anim()) +
+  # overall AQI line
+  geom_line(aes(x=month_day, 
+                y=`Overall AQI Value`,
+                group = Year,
+                text = paste0("Date: ", Date, "\n", 
+                              "Overall AQI Value: ",`Overall AQI Value`,"\n",
+                              "Main Pollutant: ",`Main Pollutant`),
+                frame = Year, ids = month_day),
+            color="#FD3216FF",
+            size=0.6) +
+  scale_x_discrete(breaks = x_breaks, labels = x_labels,
+                   expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(x="", y="") +
+  theme_tufte() +
+  theme(panel.grid.major.y = element_line(color = "gray", 
+                                          linetype = "dashed",
+                                          size = 0.5),
+        aspect.ratio = 1/2)
+
+  ggplotly(plt, tooltip = "text") %>% 
+    animation_opts(frame=1000) %>% 
+    layout(hovermode = "x",
+           xaxis = list(nticks=12), yaxis = list(tick0=0, dtick=50)
+           )
+})
+
+```
+
+### Daily Overall AQI animation 2
+
+```{r overall AQI daily for an area geom_segment animation}
+# use data frame in animation 1
+renderPlotly({
+  
+  plt <- ggplot(data=AQI_onearea_anim()) +
+  # overall AQI line
+  geom_segment(aes(x=month_day, xend=month_day,
+                   y=0,yend=`Overall AQI Value`,
+                   group = Year,
+                   text = paste0("Date: ", Date, "\n", 
+                                 "Overall AQI Value: ",`Overall AQI Value`,"\n",
+                                 "Main Pollutant: ",`Main Pollutant`),
+                   frame = Year, ids = month_day),
+               color="#FD3216FF",
+               size=0.6) +
+  scale_x_discrete(breaks = x_breaks, labels = x_labels,
+                   expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(x="", y="") +
+  theme_tufte() +
+  theme(panel.grid.major.y = element_line(color = "gray", 
+                                          linetype = "dashed",
+                                          size = 0.5),
+        aspect.ratio = 1/2)
+
+  ggplotly(plt, tooltip = "text") %>% 
+    animation_opts(frame=1000) %>% 
+    layout(hovermode = "x",
+           xaxis = list(nticks=12), yaxis = list(tick0=0, dtick=50)
+           )
+})
+
+```
+
+
+<style>
+.colored {
+  background-color: #F7FBFFFF;
+}
+</style>
+
+<span style="color:#E6F5C9FF"><font size="3">**About**</font></span> {data-orientation=rows data-icon="fas fa-info-circle"}
+===========================================
+
+Row {data-height=370}
+-----------------------------------------------------
+
+### <span style="color:#008ECEFF">**About This Dashboard**</span> { .colored}
+
+🎉🎉🎉 <span style="color:#4285f4">**Thank you for checking out this dashboard!**</span> 🎉🎉🎉
+
+- This dashboard is programmed in R and enables interactivity by using Shiny with flexdashboard.
+- This dashboard mainly focuses on data visualization or data story telling. Visualizations here are created mainly with highcharter, ggplot2, plotly, simple features (sf) packages, depict data in different ways with a variety of graph types (including animation), and enable users to easily pull insight from the data.
+- All the read-in data has been properly cleaned, combined, and wrangled separately from the dashboard R Markdown (.rmd) file based on the originally collected data. Data cleaning is completed with Python3 using numpy and pandas. Data (both before and after cleaning) is included in the **GitHub Source Code Repository**.
+- Note: The AQI data for New York City downloaded from the data source covers the area 
+"New York-Newark-Jersey City, NY-NJ-PA", which actually includes the entire area 
+(all counties) of New York City (refer to [Monitor Values Report](https://www.epa.gov/outdoor-air-quality-data/monitor-values-report)), as well as Jersey City and Newark in New Jersey (NJ) state. This dashboard only refers to this area as New York City.
+
+
+Row {data-height=630}
+-----------------------------------------------------
+
+### <span style="color:#008ECEFF">**About Data Sources**</span> { .colored}
+
+<span style="color:#008ECEFF"><font size="3">**Data Webpage and License**:</font></span>
+
+- All the original data for this dashboard is collected from [**United States Environmental Protection Agency (EPA)**](https://www.epa.gov).
+- Data Licensing Information: https://edg.epa.gov/epa_data_license.html
+
+<span style="color:#008ECEFF"><font size="3">**Greenhouse Gas (GHG) Emission Data**: </font></span>
+ 
+- In terms of state-level annual total emission on page 1, data covers all states in US from 2011 to 2020.
+- In terms of more detailed division of total emission by either industry or gas type on page 2-3, data covers four states in US from 2011 to 2020.
+- Source webpage: [**Greenhouse Gas Reporting Program (GHGRP) State and Tribal Fact Sheet**](https://www.epa.gov/ghgreporting/ghgrp-state-and-tribal-fact-sheet)
+
+<span style="color:#008ECEFF"><font size="3">**Air Quality Index (AQI) data**: </font></span>
+
+- Data (page 4-5) covers six areas of four states in US from 2011 to 2021.
+- Source webpage 1: [**Air Quality Index Daily Values Report**](https://www.epa.gov/outdoor-air-quality-data/air-quality-index-daily-values-report)
+- Source webpage 2: [**Air Data - Daily Air Quality Tracker**](https://www.epa.gov/outdoor-air-quality-data/air-data-daily-air-quality-tracker)
+- Data Codebook: https://www.epa.gov/outdoor-air-quality-data/about-air-data-reports
+- Technical Document on AQI Calculation: https://www.airnow.gov/sites/default/files/2020-05/aqi-technical-assistance-document-sept2018.pdf
+
+
