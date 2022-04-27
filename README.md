@@ -24,7 +24,7 @@
 
 ## Motivation and Advantage
 
-Climate change has increasingly raised people's awareness of environment protection. One related question we keep asking is that: What situation are we facing right now, and what will our environmental condition look like in the near future?  
+🌍🌎🌏 Climate change has increasingly raised people's awareness of environment protection. One related question we keep asking is that: What situation are we facing right now, and what will our environmental condition look like in the near future?  
 
 The creation of this dashboard is inspired directly by this issue. Specifically, this dashboard investigates two types of environmental measures: GreenHouse Gas (GHG) emission and Air Quality Index (AQI), both of which are among the most important quantifying metrics to our air and environmental conditions. It starts from giving a whole picture of state-level GHG emission trend in US, then dives further into more detailed GHG and AQI visualization for some specific states (areas). The selected states for in-depth analysis are of my personal interest because the region where I currently live is within one of them.
 
@@ -33,7 +33,7 @@ Visualization design in this dashboard are motivated by maximizing data story-te
 
 ## Dashboard Link and Overall Description
 
-- This interactive dashboard is published on shinyapps.io. Here is the link:
+- This interactive dashboard is published on shinyapps.io. Here is the link ➡️🔗:
  [**Environmental Measures Dashboard with R shiny and flexdashboard_v2**](https://qgqi6j-zhinan-li.shinyapps.io/environmental-measures-dashboard_v2/)
 - This dashboard is programmed in R and enables interactivity by using Shiny with flexdashboard.
 
@@ -79,5 +79,5 @@ You can find more information about the data and data source on **About** page o
 ## License
 
 - Apache License 2.0
-
-
+***
+### 🎉🎉🎉 Thank you for checking out this dashboard! 🎉🎉🎉
