@@ -1,4 +1,4 @@
-<img src="environmental-awareness.jpg" height="350"/> <img src="factory.png" height="350"/>
+<img src="environmental-awareness.jpg" height="300"/> <img src="factory.png" height="300"/>
 
 ![R version](https://img.shields.io/badge/R%20version-4.1.2-brightgreen)
 ![Python version](https://img.shields.io/badge/Python%20version-3.10.2-brightgreen)
