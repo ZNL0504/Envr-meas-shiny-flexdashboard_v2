@@ -14,6 +14,7 @@
 - Zhinan Li
 
 ## Dashboard Link
+Open the dashboard with this link:  
  [**Environmental Measures Dashboard with R shiny and flexdashboard_v2**](https://qgqi6j-zhinan-li.shinyapps.io/environmental-measures-dashboard_v2/)
 
 ## Dashboard Screenshot
@@ -24,9 +25,11 @@
 <img src="dashboard-images/envr_meas_dashboard_page-2-1.png" height="210"/>   <img src="dashboard-images/envr_meas_dashboard_page-2-2.png" height="210"/>
 ### page 3
 <img src="dashboard-images/envr_meas_dashboard_page-3.png" height="300"/>
+
 ### page 4
 <img src="dashboard-images/envr_meas_dashboard_page-4-1.png" height="210"/>   <img src="dashboard-images/envr_meas_dashboard_page-4-2.png" height="210"/>
 <img src="dashboard-images/envr_meas_dashboard_page-4-3.png" height="210"/>   <img src="dashboard-images/envr_meas_dashboard_page-4-4.png" height="210"/>
+
 ### page 5
 <img src="dashboard-images/envr_meas_dashboard_page-5.png" height="300"/>
 
