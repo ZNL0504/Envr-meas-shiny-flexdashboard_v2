@@ -14,6 +14,13 @@
 
 - Zhinan Li
 
+## Dashboard Screenshot
+### page 1
+<img src="dashboard-images/envr_meas_dashboard_page-1-1.png" height="230"/>   <img src="dashboard-images/envr_meas_dashboard_page-1-2.png" height="230"/>
+<img src="dashboard-images/envr_meas_dashboard_page-1-3.png" height="230"/>   <img src="dashboard-images/envr_meas_dashboard_page-1-4.png" height="230"/>
+### page 2
+<img src="dashboard-images/envr_meas_dashboard_page-2-1.png" height="230"/>   <img src="dashboard-images/envr_meas_dashboard_page-2-2.png" height="230"/>
+
 ## Table of Contents
 
 - [Motivation and Advantage](#motivation-and-advantage)
