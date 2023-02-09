@@ -1,4 +1,4 @@
-<img src="dashboard-overview.png" width="800"/>
+<img src="dashboard-overview.png" width="850"/>
 
 ![R version](https://img.shields.io/badge/R%20version-4.1.2-brightgreen)
 ![Python version](https://img.shields.io/badge/Python%20version-3.10.2-brightgreen)
@@ -22,7 +22,7 @@ Open the dashboard with this link:
 <img src="dashboard-images/envr_meas_dashboard_page-1-1.png" height="200"/>   <img src="dashboard-images/envr_meas_dashboard_page-1-2.png" height="200"/>
 <img src="dashboard-images/envr_meas_dashboard_page-1-3.png" height="200"/>   <img src="dashboard-images/envr_meas_dashboard_page-1-4.png" height="200"/>
 ### page 2
-<img src="dashboard-images/envr_meas_dashboard_page-2-1.png" height="200"/>   <img src="dashboard-images/envr_meas_dashboard_page-2-2.png" height="200"/>
+<img src="dashboard-images/envr_meas_dashboard_page-2-1.png" height="190"/>   <img src="dashboard-images/envr_meas_dashboard_page-2-2.png" height="190"/>
 ### page 3
 <img src="dashboard-images/envr_meas_dashboard_page-3.png" height="300"/>
 
